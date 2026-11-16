@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import type { WebSocket } from 'ws';
 
+import { autoRouteService } from '@/modules/auto-route/index.js';
 import { sessionsDb } from '@/modules/database/index.js';
 import { providerModelsService, sessionsService } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
@@ -21,6 +22,7 @@ import type {
 } from '@/shared/types.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
 import { appendAdversarialReviewTag } from '@/shared/adversarial-review.js';
+import { appendExplorerNotesTag } from '@/shared/explorer-notes.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -242,13 +244,24 @@ async function dispatchRun(
   const typedCommand = typeof data.content === 'string' ? data.content : '';
   // Fork: adversarial mode asks Claude to consult the other agents' CLIs. Only
   // Claude orchestrates; its history adapter strips the block again.
-  const command = provider === 'claude'
+  const reviewedCommand = provider === 'claude'
     ? appendAdversarialReviewTag(
       typedCommand,
       clientOptions.adversaries,
       String(clientOptions.cwd ?? session.project_path ?? clientOptions.projectPath ?? ''),
     )
     : typedCommand;
+  // Fork (Auto model choice): the turn an Auto decision was taken for carries
+  // the explorer's notes; every turn of an Auto session on Claude prefers the
+  // subscription account the decision chose. Both come from the server's own
+  // record of the decision, never from the client.
+  const autoRoute = await autoRouteService.prepareTurn({
+    sessionId,
+    provider,
+    decisionId: clientOptions.autoRouteDecisionId,
+    model: clientOptions.model,
+  });
+  const command = appendExplorerNotesTag(reviewedCommand, autoRoute.notes, autoRoute.notesSource);
 
   // Record what this turn runs with so reopening the session later restores the
   // same model and reasoning effort, and so the resume path has a
@@ -287,6 +300,8 @@ async function dispatchRun(
     sessionId,
     cwd: clientOptions.cwd ?? session.project_path ?? undefined,
     projectPath: session.project_path ?? clientOptions.projectPath,
+    // Always the server's answer, so a client cannot pick an account itself.
+    claudeAccount: autoRoute.account ?? undefined,
   };
 
   let failure: string | null = null;
@@ -301,6 +316,9 @@ async function dispatchRun(
     failure = error instanceof Error ? error.message : String(error);
     console.error(`[Chat] Provider runtime "${provider}" failed`, { sessionId, error: failure });
   } finally {
+    if (autoRoute.appliedDecisionId) {
+      void autoRouteService.recordOutcome({ decisionId: autoRoute.appliedDecisionId, sessionId, error: failure });
+    }
     // Safety net: a runtime that crashed (or resolved) without emitting its
     // terminal `complete` would otherwise leave the session stuck in
     // "processing" forever on every connected client. Scoped to THIS run —

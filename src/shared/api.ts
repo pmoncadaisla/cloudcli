@@ -262,6 +262,13 @@ export const api = {
   renameSession: (sessionId: string, summary: string) =>
     put(`/api/providers/sessions/${sessionId}`, { summary }),
 
+  // Fork (Auto model choice): explore and decide (takes up to ~30 s), and the decision a session runs on.
+  autoRoute: {
+    decide: (body: { prompt: string; projectPath: string; reevaluateSessionId?: string | null }) =>
+      post('/api/auto-route/decisions', body),
+    forSession: (sessionId: string) => get(`/api/auto-route/sessions/${encodeURIComponent(sessionId)}`),
+  },
+
   // Scheduled messages: send a message to a session at a future time.
   scheduledMessages: {
     list: (sessionId?: string) =>

@@ -21,6 +21,8 @@ import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { useAdversarialMode } from '@/modules/chat/hooks/useAdversarialMode';
+import { useAutoRoute, type AutoRouteTurn } from '@/modules/chat/hooks/useAutoRoute';
+import { writeSelectedProvider } from '@/shared/selectedProvider';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
 import {
   useProcessingSessions,
@@ -109,6 +111,7 @@ function ChatInterface({
     providerModelActions,
     selectProviderModel,
     selectProviderEffort,
+    applySessionSelection,
     resolvePermissionModeForProvider,
     supportsMessageEditing,
     supportsSessionForking,
@@ -170,6 +173,26 @@ function ChatInterface({
     lastSeqRef,
     sessionStore,
   });
+
+  // Fork (Auto model choice): explore + decide before the first message of a
+  // session, or the next one after "Re-evaluate".
+  const openSessionId = currentSessionId || selectedSession?.id || null;
+  const autoRoute = useAutoRoute({
+    sessionId: openSessionId,
+    sessionProvider: selectedSession?.__provider ?? (openSessionId ? provider : null),
+  });
+
+  // An Auto turn goes out on its pick: the composer, the sidebar and the next
+  // chats show the engine it chose, and the session records model and effort
+  // (not the per-provider defaults: those stay what the user picked by hand).
+  const handleAutoRouteApplied = useCallback(async (sessionId: string, turn: AutoRouteTurn) => {
+    if (turn.provider !== provider) {
+      setProvider(turn.provider);
+      writeSelectedProvider(turn.provider);
+    }
+    autoRoute.recordApplied(sessionId, turn.decision);
+    await applySessionSelection(turn.provider, sessionId, turn.model, turn.effort);
+  }, [applySessionSelection, autoRoute, provider, setProvider]);
 
   // Brand-new conversation: the composer allocated a stable session id via
   // the session gateway before the first send. Record it locally and put it
@@ -243,6 +266,8 @@ function ChatInterface({
     adversaries: turnAdversaries,
     onAdversariesSent: adversarialMode.disable,
     onAdversariesRestored: adversarialMode.enable,
+    autoRoute: autoRoute.composer,
+    onAutoRouteApplied: handleAutoRouteApplied,
     isLoading: isProcessing,
     processingSessions,
     canAbortSession,
@@ -376,20 +401,29 @@ function ChatInterface({
   // A composer pick becomes the default for new chats and, when a session is
   // open, is recorded against that session so reopening it restores this model.
   const handleSelectComposerModel = useCallback(async (model: string) => {
+    // Fork: a manual pick always wins over Auto.
+    autoRoute.noteManualPick(model);
     try {
       await selectProviderModel(provider, model, currentSessionId || selectedSession?.id || null);
     } catch (error) {
       console.error('Error changing the active session model:', error);
     }
-  }, [currentSessionId, provider, selectProviderModel, selectedSession?.id]);
+  }, [autoRoute, currentSessionId, provider, selectProviderModel, selectedSession?.id]);
 
   const handleSelectComposerEffort = useCallback(async (effort: string) => {
+    autoRoute.noteManualPick();
     try {
       await selectProviderEffort(provider, effort, currentSessionId || selectedSession?.id || null);
     } catch (error) {
       console.error('Error changing the active session reasoning effort:', error);
     }
-  }, [currentSessionId, provider, selectProviderEffort, selectedSession?.id]);
+  }, [autoRoute, currentSessionId, provider, selectProviderEffort, selectedSession?.id]);
+
+  const autoRouteMenu = useMemo(() => ({
+    active: autoRoute.isActive,
+    pickLabel: openSessionId && autoRoute.record && !autoRoute.isArmed ? autoRoute.record.decision.pick?.label ?? null : null,
+    onToggle: autoRoute.canRouteSession ? autoRoute.toggle : undefined,
+  }), [autoRoute.canRouteSession, autoRoute.isActive, autoRoute.isArmed, autoRoute.record, autoRoute.toggle, openSessionId]);
 
   const selectedProviderLabel =
     provider === 'cursor'
@@ -475,6 +509,12 @@ function ChatInterface({
             onEditMessage={supportsMessageEditing && !isProcessing ? beginEditMessage : undefined}
             onForkFromMessage={supportsSessionForking ? handleForkFromMessage : undefined}
             onLoadFullTranscript={loadFullTranscript}
+            autoRoute={{
+              record: autoRoute.record,
+              step: autoRoute.step,
+              isArmed: autoRoute.isArmed,
+              onReevaluate: autoRoute.canRouteSession ? autoRoute.reevaluate : undefined,
+            }}
           />
         </VisualActionsContext.Provider>
         </MarkdownWorkspaceContext.Provider>
@@ -514,6 +554,7 @@ function ChatInterface({
             onToggle: adversarialMode.toggle,
             onChangeSelection: adversarialMode.changeSelection,
           } : undefined}
+          autoRoute={autoRouteMenu}
           model={currentProviderModel}
           availableModelOptions={currentProviderModelOptions}
           onSelectModel={handleSelectComposerModel}

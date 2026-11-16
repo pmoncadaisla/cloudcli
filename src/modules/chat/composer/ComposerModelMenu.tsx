@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronDown, ChevronRight, Swords } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Sparkles, Swords } from 'lucide-react';
 
 import type { ProviderModelOption } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
@@ -35,6 +35,17 @@ type ComposerModelMenuProps = {
   modelsLoading: boolean;
   /** Fork: on phones adversarial mode lives in this menu instead of its own toggle. */
   adversarialMode?: AdversarialModeControls;
+  /**
+   * Fork (Auto model choice): the Auto row. When on, the trigger reads "Auto"
+   * (or "Auto → <pick>") and a manual model or effort pick turns it off.
+   */
+  autoRoute?: {
+    active: boolean;
+    /** The pick the open session runs on, for the trigger ("Auto → Sonnet 5.5 · high"). */
+    pickLabel: string | null;
+    /** Absent when Auto cannot take this session (it is not on Claude or Codex). */
+    onToggle?: () => void;
+  };
 };
 
 /**
@@ -50,6 +61,7 @@ function ComposerModelMenu({
   onSelectModel,
   modelsLoading,
   adversarialMode,
+  autoRoute,
 }: ComposerModelMenuProps) {
   const { t } = useTranslation('chat');
   const [isOpen, setIsOpen] = useState(false);
@@ -89,11 +101,15 @@ function ComposerModelMenu({
     return null;
   }
 
-  const triggerLabel = hasModelSection ? modelLabel : effortLabel;
+  const isAuto = Boolean(autoRoute?.active);
+  const autoLabel = autoRoute?.pickLabel ? `Auto → ${autoRoute.pickLabel}` : 'Auto';
+  const triggerLabel = isAuto ? autoLabel : hasModelSection ? modelLabel : effortLabel;
   // Phones drop the parenthetical ("Opus (1M context)" reads "Opus") to fit the toolbar.
-  const phoneTriggerLabel = hasModelSection ? modelLabel.replace(/\s*\(.*\)\s*$/, '') || modelLabel : effortLabel;
+  const phoneTriggerLabel = isAuto
+    ? 'Auto'
+    : hasModelSection ? modelLabel.replace(/\s*\(.*\)\s*$/, '') || modelLabel : effortLabel;
   // Phones have no effort picker, so the trigger names the level itself.
-  const showPhoneEffort = hasModelSection && hasEffortSection && effort !== DEFAULT_EFFORT_VALUE;
+  const showPhoneEffort = !isAuto && hasModelSection && hasEffortSection && effort !== DEFAULT_EFFORT_VALUE;
   const isAdversarialOn = Boolean(adversarialMode?.enabled);
   const adversaryNames = adversarialMode?.selection.map(adversaryLabel).join(' + ') ?? '';
   const ariaLabel = t('composer.modelMenu', {
@@ -120,6 +136,7 @@ function ComposerModelMenu({
         aria-label={ariaLabel}
         title={ariaLabel}
       >
+        {isAuto && <Sparkles className="h-3.5 w-3.5 shrink-0 text-hemi-copper" aria-hidden />}
         {isAdversarialOn && <Swords className="h-3.5 w-3.5 shrink-0 text-destructive sm:hidden" aria-hidden />}
         {/* With adversarial mode on, phones trade the model name for the swords; the menu still names the model. */}
         {!(isAdversarialOn && showPhoneEffort) && <span className="truncate sm:hidden">{phoneTriggerLabel}</span>}
@@ -129,13 +146,36 @@ function ComposerModelMenu({
             {isAdversarialOn ? shortEffortLabel(effort) : `· ${shortEffortLabel(effort)}`}
           </span>
         )}
-        {hasModelSection && hasEffortSection && effort !== DEFAULT_EFFORT_VALUE && !isEffortShownByPicker && (
+        {!isAuto && hasModelSection && hasEffortSection && effort !== DEFAULT_EFFORT_VALUE && !isEffortShownByPicker && (
           <span className="hidden shrink-0 capitalize text-muted-foreground sm:inline">· {effortLabel}</span>
         )}
       </button>
 
       {isOpen && anchor && createPortal(
         <ComposerMenuSurface anchor={anchor} menuRef={menuRef} ariaLabel={ariaLabel}>
+          {autoRoute && (
+            <>
+              <ComposerMenuItem
+                role="menuitemradio"
+                icon={<Sparkles className="h-3.5 w-3.5 text-hemi-copper" />}
+                label={isAuto ? autoLabel : 'Auto'}
+                description={autoRoute.onToggle
+                  ? t('composer.autoDescription', {
+                    defaultValue: 'Explores the request, then picks engine, model and effort, cheapest that fits',
+                  })
+                  : t('composer.autoUnavailable', {
+                    defaultValue: 'Auto only places sessions on Claude or Codex',
+                  })}
+                isSelected={isAuto}
+                onSelect={() => {
+                  autoRoute.onToggle?.();
+                  setIsOpen(false);
+                }}
+                className={autoRoute.onToggle ? undefined : 'opacity-60'}
+              />
+              <ComposerMenuSeparator />
+            </>
+          )}
           {hasEffortSection && (
             <>
               <ComposerMenuHeading>
@@ -146,7 +186,7 @@ function ComposerModelMenu({
                   key={option.value}
                   label={option.value === DEFAULT_EFFORT_VALUE ? defaultEffortLabel : option.value}
                   description={option.description}
-                  isSelected={option.value === effort}
+                  isSelected={!isAuto && option.value === effort}
                   onSelect={() => {
                     onSelectEffort(option.value);
                     setIsOpen(false);
@@ -227,7 +267,7 @@ function ComposerModelMenu({
                     <ComposerMenuItem
                       key={option.value}
                       label={option.label || option.value}
-                      isSelected={option.value === model}
+                      isSelected={!isAuto && option.value === model}
                       onSelect={() => {
                         onSelectModel(option.value);
                         setIsOpen(false);

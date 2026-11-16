@@ -324,6 +324,10 @@ export type NormalizedMessage = {
   files?: unknown;
   /** Fork: adversaries the user asked this turn to consult (adversarial mode); the prompt block is stripped. */
   adversaries?: string[];
+  /** Fork (Auto model choice): the explorer's brief appended to this user turn; the prompt block is stripped. */
+  explorerNotes?: string;
+  /** Fork: the model an assistant row was produced by, when the provider's transcript says. */
+  model?: string;
   toolName?: string;
   toolInput?: unknown;
   toolId?: string;
@@ -1377,4 +1381,137 @@ export type CliApplication = {
  */
 export type SandboxCommandService = {
   execute(argumentsList: string[]): Promise<number>;
+};
+
+// ---------------------------
+//----------------- AUTO MODEL ROUTING ------------
+/**
+ * The two engines the Auto model choice can start a session on. Auto never
+ * picks Cursor, OpenCode or Antigravity; a manual pick still can.
+ */
+export type AutoRouteEngine = 'claude' | 'codex';
+
+/**
+ * How capable a model the request needs, decided apart from the effort:
+ * `light` (Haiku 5.5, GPT-5.6 Luna), `standard` (Sonnet 5.5, GPT-5.6 Terra,
+ * the default when the signal is unclear) and `strong` (Opus 5.5, GPT-5.6
+ * Sol, only on a clear signal).
+ */
+export type AutoRouteCapability = 'light' | 'standard' | 'strong';
+
+/**
+ * How much thinking the request needs, decided apart from the model: any
+ * model of the ladder can run at any of these (Haiku at high, Opus at low).
+ * `medium` is the default when the signal is unclear; `xhigh` needs a clear
+ * hard and high-stakes signal.
+ */
+export type AutoRouteEffort = 'low' | 'medium' | 'high' | 'xhigh';
+
+/**
+ * What the explorer pass (phase 1) produced: a short task brief about the
+ * request, written by a cheap model with read-only tools in the session's
+ * folder. `text` is the brief as written; `kind`, `files` and `unknowns` are
+ * parsed out of it for the UI and the decision. `error` is set when the pass
+ * failed or ran out of time, and then `text` may be empty.
+ */
+export type AutoRouteBrief = {
+  text: string;
+  kind: string | null;
+  request: string | null;
+  files: string[];
+  unknowns: string | null;
+  engine: AutoRouteEngine;
+  model: string;
+  /** Whether the Hemilake lake was asked (`recall`) and gave something back. */
+  lakeUsed: boolean;
+  toolCalls: number;
+  latencyMs: number;
+  error: string | null;
+};
+
+/**
+ * One Claude subscription account as read from claude-oauth-proxy (`/surplus`
+ * and `/routing`) and the usage exporter: windows, plan weight, whether it can
+ * take new work, and `ratio`, what it has left over the share of its weekly
+ * window still to run (1.0 = on pace; below, it runs out before its reset).
+ */
+export type AutoRouteClaudeAccount = {
+  account: string;
+  weekly: number;
+  fiveHour: number;
+  left: number;
+  parked: string | null;
+  dead: boolean;
+  weight: number;
+  available: boolean;
+  ratio: number;
+  surplus: number | null;
+  canBurn: boolean;
+};
+
+/**
+ * Everything the placement weighed, as kept in the decision and the log.
+ * Either side is `{ error }` when it could not be read; an unreadable quota
+ * never stops a turn, it only keeps it on Claude with the proxy's own choice.
+ */
+export type AutoRouteQuota = {
+  at: string;
+  claude: { accounts: AutoRouteClaudeAccount[]; ratio: number } | { error: string };
+  codex:
+    | { used: number; left: number; ratio: number; reached: boolean; plan: string | null; resetsAt: number | null }
+    | { error: string };
+};
+
+/**
+ * Engine, model, reasoning effort and (on Claude) the preferred subscription
+ * account the session runs with. `model` and `effort` are values of the
+ * provider's model catalog (`opus`, `gpt-5.6-sol`, `high`...); `label` is how
+ * the UI names the pick ("Opus 5.5 · high", "GPT-5.6 Sol · high").
+ */
+export type AutoRoutePick = {
+  engine: AutoRouteEngine;
+  model: string;
+  effort: string;
+  account: string | null;
+  label: string;
+};
+
+/**
+ * One Auto decision: the explorer's brief, Gemini Decisions' answers, the
+ * quotas, and the pick. `pick` is null when anything failed, and then the
+ * composer sends with the model the user had before Auto (`fallback` says
+ * why). Kept per session (`sessionId`, set when the turn it was made for is
+ * sent) so the badge can explain it later, and logged to
+ * `~/.cloudcli/auto-route/decisions.jsonl` with every probability, so the
+ * thresholds can be tuned.
+ */
+export type AutoRouteDecision = {
+  id: string;
+  createdAt: string;
+  projectPath: string;
+  /** sha256 of the prompt, first 16 hex characters: the log never holds the prompt itself. */
+  promptHash: string;
+  promptChars: number;
+  /** Set when Pablo asked to re-evaluate an open session: the pick stays on that session's engine. */
+  forcedEngine: AutoRouteEngine | null;
+  /** On a re-evaluation, the pick the session ran on: the new one is at least two rungs above it. */
+  escalatedFrom: AutoRoutePick | null;
+  brief: AutoRouteBrief | null;
+  capability: AutoRouteCapability | null;
+  effort: AutoRouteEffort | null;
+  probabilities: {
+    capability: Record<AutoRouteCapability, number>;
+    depth: Record<AutoRouteEffort, number>;
+  } | null;
+  /** Probability of yes of each Noul: mostly reading or mechanical, multi-step design or tricky debugging, costly if wrong. */
+  signals: { routine: number; design: number; stakes: number } | null;
+  why: { capability: string; effort: string; escalation: string | null } | null;
+  decisionLatencyMs: number | null;
+  decisionError: string | null;
+  quota: AutoRouteQuota | null;
+  placement: string | null;
+  pick: AutoRoutePick | null;
+  fallback: string | null;
+  totalMs: number;
+  sessionId: string | null;
 };

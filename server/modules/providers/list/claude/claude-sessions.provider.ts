@@ -15,6 +15,7 @@ import type {
 } from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
 import { parseAdversarialReviewTag } from '@/shared/adversarial-review.js';
+import { parseExplorerNotesTag } from '@/shared/explorer-notes.js';
 import { prepareTranscriptMessages } from '@/shared/message-unification.js';
 import {
   createNormalizedMessage,
@@ -821,9 +822,11 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             const parsedFiles = parseFilesInputTag(text);
             // Fork: the dispatcher appends this block before the files tag.
             const parsedReview = parseAdversarialReviewTag(parsedFiles.text);
+            // Fork (Auto model choice): the explorer's brief rides after the prompt.
+            const parsedNotes = parseExplorerNotesTag(parsedReview.text);
             if (
-              (parsedReview.text || parsedFiles.attachments.length > 0)
-              && !isInternalContent(parsedReview.text)
+              (parsedNotes.text || parsedFiles.attachments.length > 0)
+              && !isInternalContent(parsedNotes.text)
             ) {
               messages.push(createNormalizedMessage({
                 id: `${baseId}_text_${partIndex}`,
@@ -832,8 +835,9 @@ export class ClaudeSessionsProvider implements IProviderSessions {
                 provider: PROVIDER,
                 kind: 'text',
                 role: 'user',
-                content: parsedReview.text,
+                content: parsedNotes.text,
                 adversaries: parsedReview.adversaries.length > 0 ? parsedReview.adversaries : undefined,
+                explorerNotes: parsedNotes.notes ?? undefined,
                 images: !imagesAttached && imageAttachments.length > 0 ? imageAttachments : undefined,
                 files: !filesAttached && parsedFiles.attachments.length > 0
                   ? parsedFiles.attachments
@@ -957,9 +961,10 @@ export class ClaudeSessionsProvider implements IProviderSessions {
 
         const parsedFiles = parseFilesInputTag(text);
         const parsedReview = parseAdversarialReviewTag(parsedFiles.text);
+        const parsedNotes = parseExplorerNotesTag(parsedReview.text);
         if (
-          (parsedReview.text || parsedFiles.attachments.length > 0)
-          && !isInternalContent(parsedReview.text)
+          (parsedNotes.text || parsedFiles.attachments.length > 0)
+          && !isInternalContent(parsedNotes.text)
         ) {
           messages.push(createNormalizedMessage({
             id: baseId,
@@ -968,8 +973,9 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             provider: PROVIDER,
             kind: 'text',
             role: 'user',
-            content: parsedReview.text,
+            content: parsedNotes.text,
             adversaries: parsedReview.adversaries.length > 0 ? parsedReview.adversaries : undefined,
+            explorerNotes: parsedNotes.notes ?? undefined,
             files: parsedFiles.attachments.length > 0 ? parsedFiles.attachments : undefined,
           }));
         }
@@ -1018,6 +1024,10 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     }
 
     if (raw.message?.role === 'assistant' && raw.message?.content) {
+      // Fork: which model wrote the row, so each answer can say what it ran on.
+      const rowModel = typeof raw.message.model === 'string' && !raw.message.model.startsWith('<')
+        ? raw.message.model
+        : undefined;
       if (Array.isArray(raw.message.content)) {
         let partIndex = 0;
         for (const part of raw.message.content) {
@@ -1030,6 +1040,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               kind: 'text',
               role: 'assistant',
               content: part.text,
+              model: rowModel,
             }));
           } else if (part.type === 'tool_use') {
             messages.push(createNormalizedMessage({
@@ -1041,6 +1052,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               toolName: part.name,
               toolInput: part.input,
               toolId: part.id,
+              model: rowModel,
             }));
           } else if (part.type === 'thinking' && part.thinking) {
             messages.push(createNormalizedMessage({
@@ -1063,6 +1075,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           kind: 'text',
           role: 'assistant',
           content: raw.message.content,
+          model: rowModel,
         }));
       }
       return messages;

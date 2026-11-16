@@ -301,6 +301,10 @@ export type ChatMessage = {
   files?: ChatAttachment[];
   /** Fork: adversaries this user turn asked Claude to consult (adversarial mode). */
   adversaries?: string[];
+  /** Fork (Auto model choice): the explorer's brief that went with this user turn. */
+  explorerNotes?: string;
+  /** Fork: the model an assistant turn ran on, when the provider says. */
+  model?: string;
   reasoning?: string;
   /**
    * The provider's identifier for the transcript row behind this message, when
@@ -481,6 +485,10 @@ export type NormalizedMessage = {
   files?: Array<{ path?: string; name?: string; mimeType?: string; size?: number }>;
   /** Fork: adversaries a user turn asked Claude to consult; the server strips the prompt block. */
   adversaries?: string[];
+  /** Fork (Auto model choice): the explorer's brief appended to a user turn; the server strips the block. */
+  explorerNotes?: string;
+  /** Fork: the model an assistant row was produced by. */
+  model?: string;
   toolName?: string;
   toolInput?: unknown;
   toolId?: string;
@@ -1640,3 +1648,75 @@ export type ConsoleToStudioMessage =
   | { v: 1; type: 'new'; requestId: string; prompt: string; projectPath: string | null }
   | { v: 1; type: 'focus' }
   | { v: 1; type: 'recent.request'; requestId: string; limit: number };
+
+// ---------------------------
+//----------------- AUTO MODEL CHOICE ------------
+/** Engine an Auto decision can place a session on. */
+export type AutoRouteEngine = 'claude' | 'codex';
+
+/** What an Auto decision picked: engine, catalog model and effort, Claude account, and the badge text ("Sonnet 5.5 · medium"). */
+export type AutoRoutePick = {
+  engine: AutoRouteEngine;
+  model: string;
+  effort: string;
+  account: string | null;
+  label: string;
+};
+
+/** The explorer's brief for an Auto decision; `error` is set when the pass failed or ran out of time. */
+export type AutoRouteBrief = {
+  text: string;
+  kind: string | null;
+  request: string | null;
+  files: string[];
+  unknowns: string | null;
+  engine: AutoRouteEngine;
+  model: string;
+  lakeUsed: boolean;
+  toolCalls: number;
+  latencyMs: number;
+  error: string | null;
+};
+
+/**
+ * One Auto decision as the server returns it (POST /api/auto-route/decisions,
+ * GET /api/auto-route/sessions/:id); mirrors the server's AutoRouteDecision.
+ * Read by the chat module's badge, exploring step and composer.
+ */
+export type AutoRouteDecision = {
+  id: string;
+  createdAt: string;
+  projectPath: string;
+  promptHash: string;
+  promptChars: number;
+  forcedEngine: AutoRouteEngine | null;
+  escalatedFrom: AutoRoutePick | null;
+  brief: AutoRouteBrief | null;
+  capability: 'light' | 'standard' | 'strong' | null;
+  effort: 'low' | 'medium' | 'high' | 'xhigh' | null;
+  probabilities: {
+    capability: Record<'light' | 'standard' | 'strong', number>;
+    depth: Record<'low' | 'medium' | 'high' | 'xhigh', number>;
+  } | null;
+  signals: { routine: number; design: number; stakes: number } | null;
+  why: { capability: string; effort: string; escalation: string | null } | null;
+  decisionLatencyMs: number | null;
+  decisionError: string | null;
+  quota: {
+    at: string;
+    claude: { ratio: number; accounts: Array<{ account: string; available: boolean; weekly: number; fiveHour: number; ratio: number; parked: string | null }> } | { error: string };
+    codex: { used: number; ratio: number; reached: boolean } | { error: string };
+  } | null;
+  placement: string | null;
+  pick: AutoRoutePick | null;
+  fallback: string | null;
+  totalMs: number;
+  sessionId: string | null;
+};
+
+/** The server's record of the decision a session runs on; `overriddenTo` is a model picked by hand afterwards. */
+export type AutoRouteSessionRecord = {
+  decision: AutoRouteDecision;
+  previous: string[];
+  overriddenTo: string | null;
+};

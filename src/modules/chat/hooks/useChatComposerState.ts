@@ -29,6 +29,7 @@ import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
+import type { AutoRouteComposerControls, AutoRouteTurn } from '@/modules/chat/hooks/useAutoRoute';
 
 type UseChatComposerStateArgs = {
   selectedProject: Project | null;
@@ -50,6 +51,16 @@ type UseChatComposerStateArgs = {
   onAdversariesSent?: () => void;
   /** Fork: called when a queued turn that carried adversaries goes back to the composer for editing. */
   onAdversariesRestored?: () => void;
+  /**
+   * Fork (Auto model choice): when it applies to a send, the turn is explored
+   * and routed first, and goes out on the engine, model and effort it picks.
+   */
+  autoRoute?: AutoRouteComposerControls;
+  /** Fork: the session an Auto turn went to, with the decision it carried. */
+  onAutoRouteApplied?: (
+    sessionId: string,
+    turn: AutoRouteTurn,
+  ) => void | Promise<void>;
   isLoading: boolean;
   processingSessions?: SessionActivityMap;
   canAbortSession: boolean;
@@ -184,6 +195,8 @@ export function useChatComposerState({
   adversaries,
   onAdversariesSent,
   onAdversariesRestored,
+  autoRoute,
+  onAutoRouteApplied,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -820,11 +833,43 @@ export function useChatComposerState({
       // via the session gateway. There is no client-visible session-id
       // handoff later — this id stays valid for the conversation's lifetime.
       let targetSessionId = selectedSession?.id || currentSessionId || null;
+
+      // Fork (Auto model choice): explore and decide before anything else. The
+      // prompt leaves the composer at once and the transcript shows the
+      // exploring step; the session is then created on the engine Auto picked.
+      let autoTurn: AutoRouteTurn | null = null;
+      const isAutoTurn = Boolean(
+        autoRoute
+        && !queuedSubmission
+        && !editingAnchorId
+        && autoRoute.appliesTo(targetSessionId),
+      );
+      if (isAutoTurn && autoRoute) {
+        if (autoRoute.busy) {
+          return;
+        }
+        recordSentMessage(currentInput, targetSessionId);
+        setInput('');
+        inputValueRef.current = '';
+        resetCommandMenuState();
+        setAttachedFiles([]);
+        setFileErrors(new Map());
+        setIsTextareaExpanded(false);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+        if (draftScopeRef.current) {
+          writeDraftText(draftScopeRef.current, '');
+        }
+        autoTurn = await autoRoute.route({ prompt: messageContent, projectPath: resolvedProjectPath, sessionId: targetSessionId });
+      }
+      const turnProvider: LLMProvider = !targetSessionId && autoTurn ? autoTurn.provider : provider;
+
       if (!targetSessionId) {
         let createdSessionName = sessionSummary;
         try {
           const response = await api.providers.createSession({
-            provider,
+            provider: turnProvider,
             projectPath: resolvedProjectPath,
             initialMessage: messageContent,
           });
@@ -844,6 +889,7 @@ export function useChatComposerState({
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('Session creation failed:', error);
+          autoRoute?.endStep();
           addMessage({
             type: 'error',
             content: `Failed to start a new session: ${message}`,
@@ -853,6 +899,7 @@ export function useChatComposerState({
         }
 
         if (!targetSessionId) {
+          autoRoute?.endStep();
           addMessage({
             type: 'error',
             content: 'Failed to start a new session: no session id returned.',
@@ -862,7 +909,7 @@ export function useChatComposerState({
         }
 
         onSessionEstablished?.(targetSessionId, {
-          provider,
+          provider: turnProvider,
           project: selectedProject,
           summary: createdSessionName,
         });
@@ -870,7 +917,37 @@ export function useChatComposerState({
 
       const attachmentRecords = uploadedAttachments as ChatAttachment[];
       // A queued turn keeps the adversaries it was composed with, like its other options.
-      const turnOptions = queuedSubmission?.options ?? buildSendOptions(messageContent);
+      const baseTurnOptions = queuedSubmission?.options ?? buildSendOptions(messageContent);
+      // An Auto turn runs on the pick; the server ties the decision to the
+      // session and appends the explorer's brief to the prompt.
+      const turnOptions: QueuedSendOptions = autoTurn
+        ? {
+          ...baseTurnOptions,
+          model: autoTurn.model,
+          effort: autoTurn.effort,
+          autoRouteDecisionId: autoTurn.decisionId,
+          // On another engine the turn takes that engine's permission settings.
+          ...(autoTurn.provider !== provider
+            ? (() => {
+              const toolsSettings = readUserPreference(PROVIDER_PERMISSION_PREFERENCE_KEYS[autoTurn.provider], {
+                allowedTools: [],
+                disallowedTools: [],
+                skipPermissions: false,
+              });
+              return {
+                permissionMode: resolvePermissionModeForProvider(autoTurn.provider, permissionMode),
+                toolsSettings,
+                skipPermissions: toolsSettings?.skipPermissions || false,
+              };
+            })()
+            : {}),
+          // Adversarial mode is Claude's alone.
+          ...(autoTurn.provider !== 'claude' ? { adversaries: undefined } : {}),
+        }
+        : baseTurnOptions;
+      if (autoTurn) {
+        await onAutoRouteApplied?.(targetSessionId, autoTurn);
+      }
       const turnAdversaries = Array.isArray(turnOptions.adversaries) ? (turnOptions.adversaries as string[]) : [];
       const userMessage: ChatMessage = {
         type: 'user',
@@ -879,6 +956,10 @@ export function useChatComposerState({
         files: attachmentRecords.filter((attachment) => !isImageAttachment(attachment)),
         // Fork: the chip shows at once; the server copy carries the same list.
         ...(turnAdversaries.length > 0 ? { adversaries: turnAdversaries } : {}),
+        // Fork (Auto): the brief folds under the bubble, as history shows it.
+        ...(autoTurn?.decision.brief?.text && !autoTurn.decision.brief.error
+          ? { explorerNotes: autoTurn.decision.brief.text }
+          : {}),
         timestamp: new Date(),
         // Tags this echo as the replacement, so the truncation the server
         // broadcasts a moment later cuts the turns being replaced without
@@ -887,6 +968,9 @@ export function useChatComposerState({
       };
 
       addMessage(userMessage);
+      if (isAutoTurn) {
+        autoRoute?.endStep();
+      }
       // Mark this request as processing in the per-session activity map (the
       // single source of truth the indicator derives from). The id is always
       // concrete at this point — no pending placeholder exists anymore.
@@ -949,6 +1033,10 @@ export function useChatComposerState({
       executeCommand,
       isLoading,
       onAdversariesSent,
+      autoRoute,
+      onAutoRouteApplied,
+      permissionMode,
+      resolvePermissionModeForProvider,
       onSessionProcessing,
       onSessionEstablished,
       provider,

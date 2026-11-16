@@ -12,3 +12,7 @@ export { sessionsService } from './services/sessions.service.js';
 
 export { initializeSessionsWatcher } from './services/sessions-watcher.service.js';
 export { closeSessionsWatcher } from './services/sessions-watcher.service.js';
+
+// codexAppServer: used by the auto-route module to read the Codex plan limits
+// (account/rateLimits/read) through the official client, never through LiteLLM.
+export { codexAppServer } from './list/codex/codex-app-server.client.js';
