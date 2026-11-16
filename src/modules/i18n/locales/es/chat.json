@@ -146,7 +146,9 @@
     "adversaries": "Adversarios",
     "adversariesHeading": "¿A quién pide Claude una segunda opinión?",
     "adversarialOn": "Modo adversarial activo: {{names}}",
-    "adversarialOff": "Modo adversarial: preguntar también a {{names}}"
+    "adversarialOff": "Modo adversarial: preguntar también a {{names}}",
+    "autoDescription": "Explora la petición y elige motor, modelo y esfuerzo, el más barato que sirva",
+    "autoUnavailable": "Auto solo coloca sesiones en Claude o Codex"
   },
   "providerSelection": {
     "title": "Elige tu asistente de IA",
@@ -253,7 +255,8 @@
   "message": {
     "editAndResend": "Editar y reenviar",
     "forkFromHere": "Bifurcar desde aquí",
-    "adversarialReview": "Modo adversarial"
+    "adversarialReview": "Modo adversarial",
+    "explorerNotes": "Explorado antes de elegir el modelo"
   },
   "export": {
     "trigger": "Exportar conversación",
@@ -321,5 +324,34 @@
     "outsideProject": "fuera del proyecto",
     "notFound": "no encontrada",
     "loadFailed": "no se pudo cargar"
+  },
+  "autoRoute": {
+    "exploring": "Explorando…",
+    "reexploring": "Reevaluando: explorando la petición…",
+    "exploringDetail": "un vistazo rápido, solo lectura, antes de elegir el modelo",
+    "badgeTitle": "Por qué Auto eligió este modelo",
+    "popoverLabel": "Elección automática de modelo",
+    "manual": "una elección manual",
+    "overridden": "Cambiado a mano a {{model}} después.",
+    "escalatedFrom": "Reevaluado desde {{label}}.",
+    "model": "Modelo",
+    "effort": "Esfuerzo",
+    "escalation": "Reevaluación",
+    "engine": "Motor",
+    "capability": "Capacidad",
+    "depth": "Profundidad",
+    "signals": "Señales",
+    "ratio": "ratio",
+    "accountsFree": "cuentas libres",
+    "used": "usado",
+    "brief": "Resumen de {{model}}",
+    "lake": "lago",
+    "toolCalls": "llamadas",
+    "latency": "explorar",
+    "decide": "decidir",
+    "total": "total",
+    "reevaluate": "Reevaluar",
+    "reevaluateArmed": "El próximo mensaje reevalúa",
+    "reevaluateTitle": "El próximo mensaje vuelve a explorar y decidir, dos peldaños por encima de esta elección"
   }
 }

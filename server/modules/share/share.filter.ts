@@ -1,4 +1,5 @@
 import { parseAdversarialReviewTag } from '@/shared/adversarial-review.js';
+import { parseExplorerNotesTag } from '@/shared/explorer-notes.js';
 import { parseFilesInputTag, parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { NormalizedMessage } from '@/shared/types.js';
 
@@ -109,8 +110,10 @@ function formatUserPromptText(message: NormalizedMessage): string | null {
   const parsedImages = parseImagesInputTag(withoutReminders);
   const parsedFiles = parseFilesInputTag(parsedImages.text);
   const parsedReview = parseAdversarialReviewTag(parsedFiles.text);
+  // Fork (Auto model choice): the explorer's brief can quote the lake; a share never shows it.
+  const parsedNotes = parseExplorerNotesTag(parsedReview.text);
 
-  const cleanedText = sanitizeCommonText(parsedReview.text);
+  const cleanedText = sanitizeCommonText(parsedNotes.text);
   if (startsWithSyntheticPrefix(cleanedText) || SLASH_COMMAND_TAG_REGEX.test(cleanedText)) {
     return null;
   }

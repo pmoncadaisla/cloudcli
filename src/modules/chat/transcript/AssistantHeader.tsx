@@ -2,12 +2,15 @@ import { useTranslation } from 'react-i18next';
 
 import type { LLMProvider } from '@/shared/types';
 import { LLMProviderLogo } from '@/shared/ui';
+import { formatModelName } from '@/modules/chat/utils/autoRoute';
 
 type AssistantHeaderProps = {
   kind: 'assistant' | 'tool' | 'error';
   provider: LLMProvider | string;
   /** Short local time of the first block of the turn; omitted when unknown. */
   time?: string;
+  /** Fork: the model the turn ran on, when the transcript says ("Sonnet 5.5", "GPT-5.6 Terra"). */
+  model?: string;
 };
 
 /**
@@ -15,7 +18,8 @@ type AssistantHeaderProps = {
  * it started. Rendered by MessageComponent and, when a turn opens with tool
  * calls, by ActivitySegment through ChatMessagesPane.
  */
-export default function AssistantHeader({ kind, provider, time }: AssistantHeaderProps) {
+export default function AssistantHeader({ kind, provider, time, model }: AssistantHeaderProps) {
+  const modelName = kind === 'assistant' ? formatModelName(model) : '';
   const { t } = useTranslation('chat');
   const name = kind === 'error'
     ? t('messageTypes.error')
@@ -43,6 +47,9 @@ export default function AssistantHeader({ kind, provider, time }: AssistantHeade
         </div>
       )}
       <span className="text-[13.5px] font-medium text-foreground">{name}</span>
+      {modelName && (
+        <span className="text-[11.5px] text-muted-foreground" data-testid="assistant-model">{modelName}</span>
+      )}
       {time && <span className="font-mono text-[11px] text-muted-foreground/70">{time}</span>}
     </div>
   );

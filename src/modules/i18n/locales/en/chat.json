@@ -154,7 +154,9 @@
     "adversaries": "Adversaries",
     "adversariesHeading": "Who should Claude ask for a second opinion?",
     "adversarialOn": "Adversarial mode on: {{names}}",
-    "adversarialOff": "Adversarial mode: ask {{names}} too"
+    "adversarialOff": "Adversarial mode: ask {{names}} too",
+    "autoDescription": "Explores the request, then picks engine, model and effort, cheapest that fits",
+    "autoUnavailable": "Auto only places sessions on Claude or Codex"
   },
   "providerSelection": {
     "title": "Choose Your AI Assistant",
@@ -270,7 +272,8 @@
   "message": {
     "editAndResend": "Edit and resend",
     "forkFromHere": "Fork from here",
-    "adversarialReview": "Adversarial mode"
+    "adversarialReview": "Adversarial mode",
+    "explorerNotes": "Explored before choosing the model"
   },
   "export": {
     "trigger": "Export conversation",
@@ -436,5 +439,34 @@
     "outsideProject": "outside the project",
     "notFound": "not found",
     "loadFailed": "could not be loaded"
+  },
+  "autoRoute": {
+    "exploring": "Exploring…",
+    "reexploring": "Re-evaluating: exploring the request…",
+    "exploringDetail": "a quick read-only look before choosing the model",
+    "badgeTitle": "Why Auto chose this model",
+    "popoverLabel": "Auto model choice",
+    "manual": "a manual pick",
+    "overridden": "Switched by hand to {{model}} since.",
+    "escalatedFrom": "Re-evaluated from {{label}}.",
+    "model": "Model",
+    "effort": "Effort",
+    "escalation": "Re-evaluation",
+    "engine": "Engine",
+    "capability": "Capability",
+    "depth": "Depth",
+    "signals": "Signals",
+    "ratio": "ratio",
+    "accountsFree": "accounts free",
+    "used": "used",
+    "brief": "Brief by {{model}}",
+    "lake": "lake",
+    "toolCalls": "tool calls",
+    "latency": "explore",
+    "decide": "decide",
+    "total": "total",
+    "reevaluate": "Re-evaluate",
+    "reevaluateArmed": "Next message re-evaluates",
+    "reevaluateTitle": "The next message explores and decides again, two rungs above this choice"
   }
 }

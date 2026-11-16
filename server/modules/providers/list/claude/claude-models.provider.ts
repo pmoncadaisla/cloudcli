@@ -138,6 +138,18 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
       value: 'haiku',
       label: 'Haiku',
       description: 'Fast and efficient Claude model for simple tasks.',
+      // Fork: Haiku 5.5 takes every effort level (checked through LiteLLM on
+      // 2026-11-16), and the Auto model choice runs it at low to high.
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+        ],
+      },
     },
     {
       value: 'opusplan',

@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { memo, useCallback, useMemo, useState } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
-import type { ChatMessage,
+import type { AutoRouteSessionRecord, ChatMessage,
   Project,
   ProjectSession,
   LLMProvider,
@@ -16,6 +16,9 @@ import MessageComponent from '@/modules/chat/transcript/MessageComponent';
 import ProviderSelectionEmptyState from '@/modules/chat/transcript/ProviderSelectionEmptyState';
 import ActivitySegment, { LiveLine, TurnFooter } from '@/modules/chat/transcript/ActivitySegment';
 import AssistantHeader from '@/modules/chat/transcript/AssistantHeader';
+import AutoRouteBadge from '@/modules/chat/transcript/AutoRouteBadge';
+import AutoRouteExploringStep from '@/modules/chat/transcript/AutoRouteExploringStep';
+import type { AutoRouteStep } from '@/modules/chat/hooks/useAutoRoute';
 import LoadAllMessagesOverlay from '@/modules/chat/transcript/LoadAllMessagesOverlay';
 import ChatExportMenu from '@/modules/chat/transcript/ChatExportMenu';
 import { SessionShareDialog } from '@/modules/share';
@@ -90,6 +93,13 @@ type ChatMessagesPaneProps = {
   onForkFromMessage?: (message: ChatMessage) => void;
   /** Fetches the whole transcript for an export, which otherwise only sees the loaded page. */
   onLoadFullTranscript?: () => Promise<ChatMessage[]>;
+  /** Fork (Auto model choice): the session's decision badge and the exploring step. */
+  autoRoute?: {
+    record: AutoRouteSessionRecord | null;
+    step: AutoRouteStep | null;
+    isArmed: boolean;
+    onReevaluate?: () => void;
+  };
 };
 
 /**
@@ -135,6 +145,7 @@ function ChatMessagesPane({
   onEditMessage,
   onForkFromMessage,
   onLoadFullTranscript,
+  autoRoute,
   onFileOpen,
   onShowSettings,
   onGrantToolPermission,
@@ -228,6 +239,13 @@ function ChatMessagesPane({
       {chatMessages.length > 0 && (
         <div className="pointer-events-none sticky right-4 top-3 z-10 mb-2 flex justify-end sm:px-4">
           <div className="pointer-events-auto flex items-center gap-1.5">
+            {autoRoute?.record && (
+              <AutoRouteBadge
+                record={autoRoute.record}
+                isArmed={autoRoute.isArmed}
+                onReevaluate={autoRoute.onReevaluate}
+              />
+            )}
             {(selectedSession?.id || currentSessionId) && (
               <SessionShareDialog
                 sessionId={(selectedSession?.id || currentSessionId) as string}
@@ -247,7 +265,9 @@ function ChatMessagesPane({
         </div>
       )}
       <div className="mx-auto w-full max-w-[54.25rem] space-y-3 px-4 sm:space-y-4">
-      {(isLoadingSessionMessages || isProcessing) && chatMessages.length === 0 ? (
+      {autoRoute?.step && chatMessages.length === 0 ? (
+        <AutoRouteExploringStep step={autoRoute.step} showPrompt />
+      ) : (isLoadingSessionMessages || isProcessing) && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-center space-x-2">
             <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-gray-400" />
@@ -354,7 +374,14 @@ function ChatMessagesPane({
                     estimatedHeight={ACTIVITY_ROW_HEIGHT_PX}
                   >
                     <div className="px-3 sm:px-0">
-                      {showHeader && <AssistantHeader kind="assistant" provider={provider} time={shortTime(item.timestamp)} />}
+                      {showHeader && (
+                        <AssistantHeader
+                          kind="assistant"
+                          provider={provider}
+                          time={shortTime(item.timestamp)}
+                          model={item.messages.find((entry) => entry.model)?.model}
+                        />
+                      )}
                       <ActivitySegment
                         segment={item}
                         open={openSegments[item.id]}
@@ -412,6 +439,11 @@ function ChatMessagesPane({
                   </div>
                 </div>,
               );
+            }
+
+            // Fork (Auto): a re-evaluation explores before the turn is sent.
+            if (autoRoute?.step) {
+              rows.push(<AutoRouteExploringStep key="auto-route-exploring" step={autoRoute.step} showPrompt />);
             }
 
             return rows;

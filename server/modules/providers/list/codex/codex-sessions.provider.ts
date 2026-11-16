@@ -5,6 +5,7 @@ import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import { codexAppServer } from '@/modules/providers/list/codex/codex-app-server.client.js';
+import { parseExplorerNotesTag } from '@/shared/explorer-notes.js';
 import { parseFilesInputTag, toImageAttachments } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import { prepareTranscriptMessages } from '@/shared/message-unification.js';
@@ -1380,6 +1381,8 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
   const turns = createCodexTurnTracker();
   /** Turns whose prompt already carries the anchor, so only the first does. */
   const anchoredTurnIds = new Set<string>();
+  /** Fork: the model the current turn runs on, from its `turn_context`. */
+  let turnModel: string | undefined;
 
   const fileStream = fsSync.createReadStream(sessionFilePath);
   const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
@@ -1414,6 +1417,9 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
     // that produce no transcript entry of their own, and each of those
     // branches ends in a `continue`.
     turns.observe(entry.type, payload);
+    if (entry.type === 'turn_context') {
+      turnModel = readNonEmptyString(payload.model) ?? turnModel;
+    }
 
     // ── event_msg ──────────────────────────────────────────────────────────
     if (entry.type === 'event_msg') {
@@ -1577,6 +1583,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
         timestamp,
         message: { role: 'assistant', content: textContent },
         memoryCitations: cited.memoryCitations,
+        model: turnModel,
       });
       continue;
     }
@@ -2158,9 +2165,11 @@ export class CodexSessionsProvider implements IProviderSessions {
             .join('\n')
           : String(raw.message.content || '');
       const parsedFiles = parseFilesInputTag(content);
+      // Fork (Auto model choice): the explorer's brief rides after the prompt.
+      const parsedNotes = parseExplorerNotesTag(parsedFiles.text);
       const rawImages = Array.isArray(raw.images) && raw.images.length > 0 ? raw.images : undefined;
       const files = parsedFiles.attachments.length > 0 ? parsedFiles.attachments : undefined;
-      if (!parsedFiles.text.trim() && !rawImages && !files) {
+      if (!parsedNotes.text.trim() && !rawImages && !files) {
         return [];
       }
       return [createNormalizedMessage({
@@ -2170,7 +2179,8 @@ export class CodexSessionsProvider implements IProviderSessions {
         provider: PROVIDER,
         kind: 'text',
         role: 'user',
-        content: parsedFiles.text,
+        content: parsedNotes.text,
+        explorerNotes: parsedNotes.notes ?? undefined,
         images: rawImages,
         files,
         // The enclosing turn, when the reader could name one. `baseId` is not
@@ -2201,6 +2211,8 @@ export class CodexSessionsProvider implements IProviderSessions {
         role: 'assistant',
         content,
         memoryCitations: raw.memoryCitations,
+        // Fork: the model of the turn (turn_context in history, the runtime's choice live).
+        model: readNonEmptyString(raw.model),
       })];
     }
 

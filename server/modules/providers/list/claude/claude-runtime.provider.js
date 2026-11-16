@@ -216,6 +216,22 @@ function matchesToolPermission(entry, toolName, input) {
   return false;
 }
 
+/**
+ * ANTHROPIC_CUSTOM_HEADERS with the Auto decision's preferred account added,
+ * or null when there is no (well-formed) account. Exported for tests.
+ *
+ * @param {unknown} account - Account label from the auto-route store
+ * @param {string|undefined} existing - Headers already in the environment
+ * @returns {string|null}
+ */
+export function buildClaudeAccountHeaders(account, existing) {
+  if (typeof account !== 'string' || !/^[A-Za-z0-9._@-]{1,80}$/.test(account)) {
+    return null;
+  }
+  const lines = `x-claude-account: ${account}\nx-claude-account-mode: prefer`;
+  return existing && existing.trim() ? `${existing.trim()}\n${lines}` : lines;
+}
+
 function mapCliOptionsToSDK(options = {}) {
   const { providerSessionId, cwd, toolsSettings, permissionMode, effort, resumeAnchorId, resumeFromScratch } = options;
 
@@ -224,6 +240,15 @@ function mapCliOptionsToSDK(options = {}) {
   // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
   sdkOptions.env = { ...process.env, CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: String(BG_WAIT_CEILING_MS) };
+
+  // Fork (Auto model choice): the subscription account the session's Auto
+  // decision prefers, for claude-oauth-proxy behind LiteLLM. `prefer` lets the
+  // proxy serve from another account once this one is used up. The chat
+  // dispatcher sets this from its own record, never from the client.
+  const accountHeaders = buildClaudeAccountHeaders(options.claudeAccount, process.env.ANTHROPIC_CUSTOM_HEADERS);
+  if (accountHeaders) {
+    sdkOptions.env.ANTHROPIC_CUSTOM_HEADERS = accountHeaders;
+  }
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.

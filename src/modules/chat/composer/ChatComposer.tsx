@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ChangeEvent,
   ClipboardEvent,
+  ComponentProps,
   FormEvent,
   KeyboardEvent,
   MouseEvent,
@@ -64,6 +65,8 @@ type ChatComposerProps = {
   onSelectEffort: (effort: string) => void;
   /** Fork: adversarial mode toggle; absent when the provider cannot orchestrate adversaries. */
   adversarialMode?: AdversarialModeControls;
+  /** Fork (Auto model choice): the Auto row of the model menu. */
+  autoRoute?: ComponentProps<typeof ComposerModelMenu>['autoRoute'];
   model: string;
   availableModelOptions: ProviderModelOption[];
   onSelectModel: (model: string) => void;
@@ -140,6 +143,7 @@ export default function ChatComposer({
   availableEffortOptions,
   onSelectEffort,
   adversarialMode,
+  autoRoute,
   model,
   availableModelOptions,
   onSelectModel,
@@ -484,13 +488,17 @@ export default function ChatComposer({
               onSelectModel={onSelectModel}
               modelsLoading={modelsLoading}
               adversarialMode={adversarialMode}
+              autoRoute={autoRoute}
             />
 
-            <ComposerEffortPicker
-              effort={effort}
-              effortOptions={availableEffortOptions}
-              onSelectEffort={onSelectEffort}
-            />
+            {/* Fork: in Auto the effort is Auto's to pick. */}
+            {!autoRoute?.active && (
+              <ComposerEffortPicker
+                effort={effort}
+                effortOptions={availableEffortOptions}
+                onSelectEffort={onSelectEffort}
+              />
+            )}
 
             {adversarialMode && (
               <ComposerAdversarialToggle

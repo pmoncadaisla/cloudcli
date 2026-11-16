@@ -39,6 +39,8 @@ export type UserPreferences = {
   adversaries: string[] | null;
   /** Fork: theme id from src/shared/theme/registry.tsx; null means the instance default. */
   colorTheme: string | null;
+  /** Fork: new chats start in Auto (explore, then pick engine, model and effort); false or null means manual. */
+  autoModel: boolean | null;
 };
 
 export type UserPreferenceKey = keyof UserPreferences;
@@ -85,6 +87,7 @@ const LEGACY_STORAGE_KEYS: Record<UserPreferenceKey, string> = {
   chatWorkspaceEffort: '',
   adversaries: '',
   colorTheme: '',
+  autoModel: '',
 };
 
 const PREFERENCE_KEYS = Object.keys(LEGACY_STORAGE_KEYS) as UserPreferenceKey[];

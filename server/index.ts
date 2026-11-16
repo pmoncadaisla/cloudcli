@@ -51,6 +51,7 @@ import {
 } from './modules/plugins/index.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import { voiceRoutes } from './modules/voice/index.js';
+import { autoRouteRoutes } from './modules/auto-route/index.js';
 import {
     closeScheduledMessageDispatcher,
     initializeScheduledMessageDispatcher,
@@ -222,6 +223,9 @@ app.use('/api/shares', authenticateToken, shareRoutes);
 app.use('/api/agent', agentRoutes);
 
 app.use('/api/voice', authenticateToken, voiceRoutes);
+
+// Fork (Auto model choice): explore the request, decide the engine and model, explain it later.
+app.use('/api/auto-route', authenticateToken, autoRouteRoutes);
 
 // Fork (themes): the theme this instance starts with, public so the login screen
 // shows it, and the PWA manifest named and iconed after it.

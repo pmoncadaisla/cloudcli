@@ -719,6 +719,28 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     }
   }, [chatWorkspaceEffort, provider, sessionSelection, setChatWorkspaceEffort, setStoredProviderEffort]);
 
+  /**
+   * Fork (Auto model choice): records the model and effort an Auto decision
+   * picked for one session, without making them the default for new chats the
+   * way a manual pick does. The chat dispatcher records them again when the
+   * turn arrives; this keeps the composer right in the meantime.
+   */
+  const applySessionSelection = useCallback(async (
+    targetProvider: LLMProvider,
+    sessionId: string,
+    model: string,
+    effort: string,
+  ) => {
+    sessionSelectionLoadRequestIdRef.current += 1;
+    setSessionSelection({ provider: targetProvider, sessionId, model, effort });
+    try {
+      await api.providers.setSessionActiveModel(targetProvider, sessionId, model);
+      await api.providers.setSessionActiveEffort(targetProvider, sessionId, effort);
+    } catch (error) {
+      console.warn('Unable to record the Auto choice for this session:', error);
+    }
+  }, []);
+
   // The open session's model wins over the per-provider default, so switching
   // sessions shows (and sends) what each session actually runs with.
   const currentProviderModel = sessionModel ?? chatWorkspaceModel ?? providerModels[provider];
@@ -872,6 +894,7 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     providerModelActions,
     selectProviderModel,
     selectProviderEffort,
+    applySessionSelection,
     resolvePermissionModeForProvider,
     supportsMessageEditing,
     supportsSessionForking,

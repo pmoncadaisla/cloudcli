@@ -480,6 +480,10 @@ async function queryCodex(
         // Normalize the transformed event into NormalizedMessage(s) via adapter
         const normalizedMsgs = context.normalizeMessage(transformed, capturedSessionId || sessionId || null);
         for (const msg of normalizedMsgs) {
+          // Fork: live answers say which model they ran on, as history does.
+          if (msg.kind === 'text' && msg.role === 'assistant' && !msg.model && resolvedModel) {
+            msg.model = resolvedModel;
+          }
           sendMessage(ws, msg);
         }
 

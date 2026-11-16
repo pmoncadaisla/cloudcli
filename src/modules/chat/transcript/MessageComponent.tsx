@@ -1,6 +1,6 @@
 import { memo, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GitBranchIcon, PencilIcon, Swords } from 'lucide-react';
+import { Compass, GitBranchIcon, PencilIcon, Swords } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
@@ -169,6 +169,18 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 <span>{formattedTime}</span>
               </div>
             )}
+            {message.explorerNotes && (
+              /* Fork (Auto model choice): the explorer's brief, sent with this turn */
+              <details className="group/explorer max-w-full text-xs text-muted-foreground" data-testid="explorer-notes">
+                <summary className="flex cursor-pointer list-none items-center justify-end gap-1 hover:text-foreground">
+                  <Compass className="h-3 w-3 text-hemi-copper" aria-hidden />
+                  {t('message.explorerNotes', { defaultValue: 'Explored before choosing the model' })}
+                </summary>
+                <div className="mt-1 whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-left text-[12.5px] leading-5 text-foreground/80">
+                  {message.explorerNotes}
+                </div>
+              </details>
+            )}
           </div>
           {!isGrouped && (
             <div className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary text-sm text-primary-foreground sm:flex">
@@ -222,6 +234,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               kind={message.type === 'error' ? 'error' : message.type === 'tool' ? 'tool' : 'assistant'}
               provider={provider}
               time={headerTime}
+              model={message.model}
             />
           )}
 

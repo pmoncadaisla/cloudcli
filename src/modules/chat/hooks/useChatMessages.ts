@@ -355,6 +355,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
               images,
               files,
               adversaries: msg.adversaries,
+              explorerNotes: msg.explorerNotes,
               ...sharedMetadata,
             });
           }
@@ -365,6 +366,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             content: text,
             timestamp: msg.timestamp,
             memoryCitations: msg.memoryCitations,
+            model: msg.model,
             ...sharedMetadata,
           });
         }
@@ -417,6 +419,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           subagent: msg.subagent,
           subagentActivity,
           memoryCitations: msg.memoryCitations,
+          model: msg.model,
           ...sharedMetadata,
         });
         break;
